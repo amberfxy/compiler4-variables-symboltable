@@ -7,13 +7,8 @@
 #include "stack_machine_ir.h"
 #include "stack_machine.h"
 
-
-
-// Compiler pipeline:
-// 1. Read source file
-// 2. Lex and parse
-// 3. Generate IR
-// 4. Emit assembly
+// Global symbol stack
+SymStack* g_symstack = NULL;
 
 int main(int argc, char** argv) {
     if (argc < 3) {
@@ -23,6 +18,9 @@ int main(int argc, char** argv) {
 
     const char* input_path  = argv[1];
     const char* output_path = argv[2];
+
+    // Initialize global symbol stack
+    g_symstack = symstack_new();
 
     // ---------- Step 1: Read source ----------
     FILE* f = fopen(input_path, "r");
@@ -39,7 +37,6 @@ int main(int argc, char** argv) {
     src[len] = '\0';
     fclose(f);
 
-
     // ---------- Step 2: Initialize lexer & parser ----------
     Lexer lexer;
     init_lexer(&lexer, src);
@@ -51,27 +48,32 @@ int main(int argc, char** argv) {
     if (!fn) {
         fprintf(stderr, "Error: parsing failed.\n");
         free(src);
+        symstack_free(g_symstack);
         return 1;
     }
 
     // ---------- Step 3: Generate IR ----------
     IRList ir;
     ir_init(&ir);
-    gen_function(fn, &ir, NULL);
+    int locals_aligned = 0;
+    gen_function(fn, &ir, &locals_aligned);
 
     // ---------- Step 4: Write assembly ----------
     FILE* out = fopen(output_path, "w");
     if (!out) {
         fprintf(stderr, "Error: cannot open output file %s\n", output_path);
         free(src);
+        symstack_free(g_symstack);
         return 1;
     }
 
-    stack_machine_emit(out, fn->name, &ir, 0);
+    stack_machine_emit(out, fn->name, &ir, locals_aligned);
     fclose(out);
 
     printf("✅ Compilation successful!\n");
     printf("Generated assembly: %s\n", output_path);
 
     free(src);
+    symstack_free(g_symstack);
+    return 0;
 }
